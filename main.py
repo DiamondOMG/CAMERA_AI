@@ -6,7 +6,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-SAVE_DIR = "IMAGE_001"
+SAVE_DIR = os.path.join("image", "IMAGE_001")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 @app.post("/upload")
