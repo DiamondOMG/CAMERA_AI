@@ -33,3 +33,6 @@ dist/
 .cache/
 
 image/
+
+venv_311/
+test/output/

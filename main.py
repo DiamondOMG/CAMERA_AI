@@ -1,25 +1,57 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, Request, Header
 from fastapi.responses import JSONResponse
 import uvicorn
 import os
 from datetime import datetime
 
+# --- การตั้งค่าเริ่มต้น ---
 app = FastAPI()
 
+# กำหนดไดเรกทอรีสำหรับบันทึกไฟล์ และสร้างถ้ายังไม่มี
 SAVE_DIR = os.path.join("image", "IMAGE_001")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
+# --- ฟังก์ชันหลักสำหรับอัปโหลด ---
+
 @app.post("/upload")
-async def upload_image(file: UploadFile = File(...)):
-    ext = os.path.splitext(file.filename)[1] or ".jpg"
-    filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ext
-    file_path = os.path.join(SAVE_DIR, filename)
+async def upload_image(
+    request: Request, 
+    # อ่าน Custom Header ที่ส่งมาจาก ESP32
+    x_file_name: str = Header(None) 
+):
+    try:
+        # 1. อ่านข้อมูล Raw Bytes จาก Body
+        file_bytes = await request.body()
+        
+        if not file_bytes:
+            return JSONResponse({"status": "error", "message": "No file data received"}, status_code=400)
 
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
+        # 2. กำหนดชื่อไฟล์
+        if x_file_name:
+            # ใช้ชื่อไฟล์ที่ส่งมาจาก Header
+            # ใช้ os.path.basename เพื่อป้องกัน Path Traversal
+            base_filename = os.path.basename(x_file_name)
+            filename = base_filename 
+        else:
+            # หากไม่มี Header แนบมา ให้สร้างชื่อไฟล์ตามวันที่และเวลา
+            filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".dat" 
+            # ใช้นามสกุล .dat หรือ .bin หากไม่ทราบประเภทไฟล์ที่แน่ชัด
+            
+        file_path = os.path.join(SAVE_DIR, filename)
 
-    return JSONResponse({"status": "ok", "file_saved": filename})
+        # 3. บันทึกไฟล์
+        with open(file_path, "wb") as buffer:
+            buffer.write(file_bytes)
 
+        # 4. ตอบกลับสำเร็จ
+        return JSONResponse({"status": "ok", "file_saved": filename})
+    
+    except Exception as e:
+        # ดักจับข้อผิดพลาดทั่วไป
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+# --- รัน Uvicorn ---
 
 if __name__ == "__main__":
+    # ใช้ uvicorn.run แทนการรันด้วยคำสั่งภายนอก (เมื่อรันไฟล์โดยตรง)
     uvicorn.run(app, host="0.0.0.0", port=8000)
