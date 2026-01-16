@@ -36,3 +36,4 @@ image/
 
 venv_311/
 test/output/
+train_images/
