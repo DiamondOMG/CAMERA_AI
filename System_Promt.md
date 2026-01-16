@@ -1,125 +1,76 @@
-# System Prompt – Image Analytics from ESP32-CAM
+# System Prompt – ESP32-CAM Face Recognition System
 
 ## Overview
+ระบบตรวจจับและจดจำใบหน้า (Face Recognition) จากกล้อง ESP32-CAM โดยเน้นการทำงานแบบแยกส่วน (Microservices style) ระหว่างส่วนรับภาพและส่วนประมวลผล
 
-This system analyzes human presence from ESP32-CAM devices.  
-It consists of three main components:
-
-1. **ESP32-CAM Edge Device**
-2. **Server API (FastAPI)**
-3. **Image Processing Worker and Database (Results Only)**
-
-The system is designed to process high-frequency image capture efficiently, storing only analysis results in the database while raw images remain in file storage.
+### System Architecture
+1. **Edge Device (ESP32-CAM)**: ถ่ายภาพและส่งมาที่ Server
+2. **File Server (FastAPI)**: รับไฟล์ภาพและบันทึกลง Disk
+3. **Face Watcher (Service)**: เฝ้าดูโฟลเดอร์ภาพและประมวลผลใบหน้า
+4. **Face Database (Pickle)**: ฐานข้อมูลใบหน้าและเวกเตอร์ (Encodings)
 
 ---
 
-## 1. ESP32-CAM (Edge Device)
+## 1. Flow การทำงาน
 
-- Detect motion using a PIR sensor.
-- Capture images at **5 FPS** (~200ms interval).
-- **Image file size:** max **50KB** (compressed JPEG)
-- File naming convention: timestamp in milliseconds (e.g., `1764318832186.jpg`).
-- Store images locally on SD Card.
-- Maintain an upload queue to send images to the server via HTTP POST (`/upload?device=ID`).
-- Retry uploads automatically if the network is unavailable.
-- **No AI processing is performed on the device.**
+### 1.1 การรับภาพ (Upload)
+- **Component**: `main.py` (FastAPI)
+- **Endpoint**: `POST /upload`
+- **หน้าที่**: 
+  - รับข้อมูล Raw Bytes / Multipart จาก ESP32
+  - อ่าน Header `x-file-name` เพื่อตั้งชื่อไฟล์ (หรือใช้ Timestamp)
+  - บันทึกไฟล์ลงโฟลเดอร์ `image/IMAGE_001/`
+  - *ไม่มีการประมวลผลใดๆ ในขั้นตอนนี้เพื่อให้ Response เร็วที่สุด*
 
----
+### 1.2 การประมวลผล (Processing)
+- **Component**: `face_watcher.py` (Watchdog Service)
+- **หน้าที่**:
+  - เฝ้าดู (Monitor) โฟลเดอร์ `image/IMAGE_001/` ตลอดเวลา
+  - เมื่อมีไฟล์ใหม่ -> รอให้ไฟล์เขียนเสร็จ -> อ่านภาพ
+  - **Detect Face**: ตรวจจับตำแหน่งใบหน้า
+  - **Encode & Match**: แปลงใบหน้าเป็น Vector และเทียบกับ `test/output/face_database.pkl`
+  - **Logging**: แสดงผลลัพธ์ทาง Console ว่าเจอใคร (Name) หรือเป็นคนแปลกหน้า (Unknown) โดยดูจากค่า Distance
+  - **Tracking**: บันทึกชื่อไฟล์ลง `processed_files.txt` เพื่อป้องกันการประมวลผลซ้ำ
 
-## 2. Server API (FastAPI)
-
-- Endpoint: `POST /upload?device=DEVICE_ID`
-- Receives image files via multipart/form-data.
-- Stores images in device-specific folders:
-  images/<DEVICE_ID>/<TIMESTAMP>.jpg
-
-- Does not perform image analysis on upload.
-- Queues tasks for Worker processing.
-
----
-
-## 3. Worker – Image Processing Pipeline
-
-Worker reads images from device folders and performs:
-
-### Processing Strategy
-
-- **System supports:** up to **10 devices**
-- **Processing mode:** Batch/queue-based (not real-time)
-- **Batch size:** 100 images per device per cycle
-- Poll each device folder every N seconds (e.g., check folder, process 100 images, move to next device)
-
-### Responsibilities
-
-1. Person detection.
-2. Unique person identification (tracking across frames).
-3. Dwell time calculation using timestamp sequence.
-4. Generate events summarizing key results:
-   - `start_ts`: entry time
-   - `end_ts`: exit time
-   - `dwell_time`: duration
-   - `person_id`: unique identifier
-
-### Post-Processing
-
-- Store only analysis results in the database.
-- Optionally delete raw images after processing or retain them for a defined period.
+### 1.3 การจัดการฐานข้อมูล (Database Management)
+- **Training**: `train_model.py`
+  - อ่านรูปจากโฟลเดอร์ `train_images/{PERSON_NAME}/`
+  - สร้าง Encoding ของทุกคนใหม่ทั้งหมด (Rebuild)
+  - บันทึกลงไฟล์ `.pkl`
+- **Inference**: `read_face_database.py` (Utility)
+  - อ่านเช็คข้อมูลในไฟล์ฐานข้อมูล
 
 ---
 
-## 4. Database Design (Results Only)
+## 2. โครงสร้างโฟลเดอร์ (Directory Structure)
 
-### `events` table
+```text
+CAMERA_AI/
+├── main.py                # Web Server (FastAPI)
+├── face_watcher.py        # Service เฝ้าดูและประมวลผลภาพ
+├── train_model.py         # Script สำหรับ Train หน้าคนใหม่
+├── train_images/          # โฟลเดอร์เก็บรูปต้นฉบับสำหรับ Train
+│   ├── somchai/
+│   │   ├── img1.jpg
+│   │   └── img2.jpg
+│   └── somying/
+├── image/
+│   └── IMAGE_001/         # โฟลเดอร์รับรูปจาก ESP32 (Watcher เฝ้าตรงนี้)
+├── test/
+│   └── output/
+│       └── face_database.pkl  # ไฟล์ฐานข้อมูลใบหน้า (Model)
+└── processed_files.txt    # list ไฟล์ที่ประมวลผลแล้ว
+```
 
-Stores only summarized events (one event may correspond to many images):
-| Column | Description |
-|--------------|-------------|
-| event_id | Unique event identifier |
-| device_id | Device identifier |
-| person_id | Unique person ID |
-| start_ts | Event start timestamp |
-| end_ts | Event end timestamp |
-| dwell_time | Duration in seconds |
+## 3. Configuration
 
-### `person_summary` table (optional)
+- **Models**: ใช้ `hog` (CPU Friendly) หรือ `cnn` (GPU Needed - แม่นยำกว่า)
+- **Tolerance**: ค่าความเหมือน (Distance Threshold)
+  - `0.6`: ค่ามาตรฐาน
+  - `0.5`: เข้มงวดขึ้น (ลด False Positive)
+  - `0.4`: เข้มงวดมาก (เฉพาะหน้าชัดๆ)
 
-Aggregates daily statistics:
-| Column | Description |
-|---------------------|-------------|
-| date | Date of summary |
-| device_id | Device identifier |
-| unique_person_count | Number of unique persons |
-| total_dwell_time | Total dwell time per device |
-
-**Note:** Storing only events ensures database remains lightweight (<200 records/day/device) even with high-frequency image capture.
-
----
-
-## 5. Data Flow
-
-[ESP32-CAM]
-PIR Detect → Capture → Save SD → Upload Queue → POST /upload
-
-[Server]
-Receive → Save to /images/DEVICE_ID/ → Queue task for Worker
-
-[Worker]
-Poll folders (every N seconds) → Collect 100 images per device → Analyze → Generate events → Save to DB → (optional) delete processed images
-
----
-
-## 6. Rationale for Not Storing Raw Images in DB
-
-- High-frequency capture (0.2s interval) generates ~432,000 images/day/device.
-- Storing all metadata in the database would be resource-intensive.
-- Keeping only results (events, dwell times, unique person IDs) drastically reduces storage requirements while maintaining essential analytics.
-
----
-
-## 7. System Goals
-
-- Efficiently analyze images from multiple ESP32-CAM devices.
-- Count unique persons.
-- Calculate dwell time.
-- Store only results to maintain high performance and scalability.
-- Enable seamless integration with analytics dashboards.
+## 4. Future Improvements
+- เชื่อมต่อ Database จริง (MySQL/PostgreSQL) แทน Text File
+- ส่ง Notification (Line/Discord) เมื่อเจอคนแปลกหน้า
+- ทำ Dashboard แสดงประวัติการเข้า-ออก

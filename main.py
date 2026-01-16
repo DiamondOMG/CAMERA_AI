@@ -36,8 +36,15 @@ async def upload_image(
             # หากไม่มี Header แนบมา ให้สร้างชื่อไฟล์ตามวันที่และเวลา
             filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".dat" 
             # ใช้นามสกุล .dat หรือ .bin หากไม่ทราบประเภทไฟล์ที่แน่ชัด
-            
-        file_path = os.path.join(SAVE_DIR, filename)
+        
+        # รับค่า folder จาก query parameter (ถ้าไม่ส่งมาจะใช้ค่าเริ่มต้น)
+        folder = request.query_params.get("folder", "IMAGE_001")
+        
+        # สร้าง path สำหรับบันทึกไฟล์
+        current_save_dir = os.path.join("image", folder)
+        os.makedirs(current_save_dir, exist_ok=True)
+
+        file_path = os.path.join(current_save_dir, filename)
 
         # 3. บันทึกไฟล์
         with open(file_path, "wb") as buffer:
