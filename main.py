@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Header
+from fastapi import FastAPI, Request, Header, UploadFile, File
 from fastapi.responses import JSONResponse
 import uvicorn
 import os
@@ -13,7 +13,7 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 
 # --- ฟังก์ชันหลักสำหรับอัปโหลด ---
 
-@app.post("/upload")
+@app.post("/upload_binary")
 async def upload_image(
     request: Request, 
     # อ่าน Custom Header ที่ส่งมาจาก ESP32
@@ -55,6 +55,31 @@ async def upload_image(
     
     except Exception as e:
         # ดักจับข้อผิดพลาดทั่วไป
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+@app.post("/upload_form_data")
+async def upload_image_form_data(
+    file: UploadFile = File(...),
+    folder: str = "IMAGE_001"
+):
+    try:
+        # สร้าง path สำหรับบันทึกไฟล์
+        current_save_dir = os.path.join("image", folder)
+        os.makedirs(current_save_dir, exist_ok=True)
+        
+        filename = file.filename
+        if not filename:
+             filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".dat"
+             
+        file_path = os.path.join(current_save_dir, filename)
+        
+        # บันทึกไฟล์
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+            
+        return JSONResponse({"status": "ok", "file_saved": filename})
+    except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 # --- รัน Uvicorn ---
