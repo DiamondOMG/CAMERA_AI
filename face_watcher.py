@@ -13,11 +13,11 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # --- ตั้งค่า ---
-WATCH_DIR = "image/IMAGE_001"
+WATCH_DIR = "image/IMAGE_002"
 DB_PATH = "test/output/face_database.pkl"
 PROCESSED_FILE = "processed_files.txt"  # เก็บรายชื่อไฟล์ที่ประมวลผลแล้ว
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png'}
-TOLERANCE = 0.6  # ค่า distance ที่ยอมรับ (ยิ่งต่ำยิ่งเข้มงวด)
+TOLERANCE = 0.45  # ค่า distance ที่ยอมรับ (ยิ่งต่ำยิ่งเข้มงวด)
 MODEL = "hog"
 
 
