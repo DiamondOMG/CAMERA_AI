@@ -6,6 +6,7 @@ Face Watcher Service
 import os
 import time
 import pickle
+import requests
 import face_recognition
 from pathlib import Path
 from datetime import datetime
@@ -17,8 +18,23 @@ WATCH_DIR = "image/IMAGE_002"
 DB_PATH = "test/output/face_database.pkl"
 PROCESSED_FILE = "processed_files.txt"  # เก็บรายชื่อไฟล์ที่ประมวลผลแล้ว
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png'}
-TOLERANCE = 0.45  # ค่า distance ที่ยอมรับ (ยิ่งต่ำยิ่งเข้มงวด)
+TOLERANCE = 0.6  # ค่า distance ที่ยอมรับ (ยิ่งต่ำยิ่งเข้มงวด)
 MODEL = "hog"
+
+# --- Jarvis Integration ---
+JARVIS_API_URL = "http://localhost:3000/api/trigger"
+JARVIS_ENABLED = True  # เปิด/ปิดการเชื่อมต่อ Jarvis
+GREETING_COOLDOWN = 60  # วินาที - ไม่ทักทายคนเดิมซ้ำภายในเวลานี้
+JARVIS_STARTUP_DELAY = 2  # วินาที - รอให้ Jarvis session เปิดก่อน sendText
+
+# --- Name Mapping (folder name → ชื่อภาษาไทย) ---
+NAME_MAPPING = {
+    "mond": "ม่อน",
+    "neab": "เนี๊ยบ",
+    "p_hok": "พี่หก",
+    "p_nus": "พี่นัส",
+    "p_ohm": "พี่โอม",
+}
 
 
 class FaceDatabase:
@@ -107,6 +123,52 @@ class ImageHandler(FileSystemEventHandler):
     def __init__(self, db: FaceDatabase, processed: ProcessedFiles):
         self.db = db
         self.processed = processed
+        self.last_greeted = {}  # เก็บเวลาทักทายล่าสุดของแต่ละคน
+    
+    def notify_jarvis(self, name: str | None):
+        """ส่งการแจ้งเตือนไป Jarvis ให้ทักทาย"""
+        if not JARVIS_ENABLED:
+            return
+        
+        # แปลงชื่อเป็นภาษาไทย (ถ้ามี mapping)
+        display_name = NAME_MAPPING.get(name, name) if name else None
+        greeting_key = name if name else "unknown"
+        
+        now = time.time()
+        last_time = self.last_greeted.get(greeting_key, 0)
+        
+        # เช็ค cooldown - ไม่ทักทายคนเดิมซ้ำเร็วเกินไป
+        if now - last_time < GREETING_COOLDOWN:
+            print(f"   ⏳ ข้าม Jarvis (ทักทาย {display_name or 'unknown'} ไปแล้วเมื่อ {int(now - last_time)} วินาทีก่อน)")
+            return
+        
+        try:
+            # ใช้คำสั่ง wakeAndGreet คำสั่งเดียว
+            print(f"   🔔 แจ้งเตือน Jarvis (Wake & Greet)...")
+            
+            if display_name:
+                message = f"มีคนชื่อ {display_name} เข้ามา กรุณาทักทายเขาหน่อย"
+            else:
+                message = "มีคนแปลกหน้าเข้ามา กรุณาถามชื่อและเสนอความช่วยเหลือ"
+            
+            response = requests.post(
+                JARVIS_API_URL,
+                json={"action": "wakeAndGreet", "message": message},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                self.last_greeted[greeting_key] = now
+                print(f"   🤖 Jarvis: ส่งคำสั่งสำเร็จ!")
+            else:
+                print(f"   ⚠️ Jarvis: API error {response.status_code}")
+            
+
+                
+        except requests.exceptions.ConnectionError:
+            print(f"   ⚠️ Jarvis: ไม่สามารถเชื่อมต่อได้ (Jarvis อาจยังไม่เปิด)")
+        except Exception as e:
+            print(f"   ⚠️ Jarvis error: {e}")
     
     def on_created(self, event):
         """เมื่อมีไฟล์ใหม่ถูกสร้าง"""
@@ -156,8 +218,12 @@ class ImageHandler(FileSystemEventHandler):
                 
                 if name:
                     print(f"   ✅ ใบหน้า #{i+1}: {name} (distance: {distance:.4f})")
+                    # 🤖 แจ้ง Jarvis ให้ทักทายคนรู้จัก
+                    self.notify_jarvis(name)
                 else:
                     print(f"   ❓ ใบหน้า #{i+1}: Unknown (distance: {distance:.4f})")
+                    # 🤖 แจ้ง Jarvis ให้ทักทายคนแปลกหน้า
+                    self.notify_jarvis(None)
             
             # บันทึกว่าประมวลผลแล้ว
             self.processed.add(filename)
