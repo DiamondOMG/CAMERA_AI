@@ -36,5 +36,3 @@ image/
 
 venv_311/
 test/output/
-train_images/
-vosk-model-small-en-us-0.15/
