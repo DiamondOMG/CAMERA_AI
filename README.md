@@ -13,3 +13,7 @@ curl -X POST -H "Content-Type: application/octet-stream" -H "X-File-Name: image_
 # Production
 pm2 kill
 pm2 start pm2.config.js
+
+# ติดตั้ง
+pip freeze > requirements.txt
+pip install -r requirements.txt
