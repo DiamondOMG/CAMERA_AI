@@ -17,7 +17,8 @@ import os
 # --- ตั้งค่า ---
 JARVIS_API_URL = "http://localhost:3000/api/trigger"
 CHUNK_SIZE = 1280
-MODEL_NAME = "hey_jarvis" # มีให้เลือก: hey_jarvis, alexa, hey_mycroft, etc.
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "hey__act_bot__kuung.onnx")
+MODEL_NAME = "hey__act_bot__kuung" # ชื่อโมเดลที่ใช้ดึง score จาก prediction
 THRESHOLD = 0.5 # เพิ่มขึ้นนิดหน่อยเพื่อความแม่นยำ (0.0 - 1.0)
 COOLDOWN_SECONDS = 4 # เพิ่มเวลาพักหน่อยครับ
 
@@ -48,11 +49,12 @@ def main():
     print("=" * 50)
     
     # โหลด Model
-    print(f"📥 Loading model: {MODEL_NAME}...")
+    print(f"📥 Loading custom model: {MODEL_NAME}...")
+    print(f"    Path: {MODEL_PATH}")
     try:
-        # โหลด OpenWakeWord Model (ระบุ framework='onnx')
+        # โหลด Custom ONNX Model
         owwModel = Model(
-            wakeword_models=[MODEL_NAME], 
+            wakeword_models=[MODEL_PATH], 
             inference_framework="onnx"
         )
     except Exception as e:
@@ -72,7 +74,7 @@ def main():
     )
 
     print(f"\n👂 Listening for '{MODEL_NAME}'...")
-    print("   (Note: ลองพูด 'Hey Jarvis' ชัดๆ)")
+    print("   (Note: ลองพูด 'Hey Act Bot Kuung' ชัดๆ)")
     
     last_trigger = 0
 
