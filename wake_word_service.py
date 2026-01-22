@@ -18,8 +18,8 @@ import os
 JARVIS_API_URL = "http://localhost:3000/api/trigger"
 CHUNK_SIZE = 1280
 MODEL_NAME = "hey_jarvis" # มีให้เลือก: hey_jarvis, alexa, hey_mycroft, etc.
-THRESHOLD = 0.35 # ความไว (0.0 - 1.0) ยิ่งน้อยยิ่งไว
-COOLDOWN_SECONDS = 3
+THRESHOLD = 0.5 # เพิ่มขึ้นนิดหน่อยเพื่อความแม่นยำ (0.0 - 1.0)
+COOLDOWN_SECONDS = 4 # เพิ่มเวลาพักหน่อยครับ
 
 def trigger_jarvis():
     """ยิง API ไปปลุก Jarvis"""
@@ -29,8 +29,7 @@ def trigger_jarvis():
         response = requests.post(
             JARVIS_API_URL,
             json={
-                "action": "wakeAndGreet", 
-                "message": "ผู้ใช้กล่าวทักทายคุณ (Wake Word Triggered) กรุณาตอบรับสั้นๆครับ"
+                "action": "start", 
             },
             timeout=1
         )
@@ -73,7 +72,7 @@ def main():
     )
 
     print(f"\n👂 Listening for '{MODEL_NAME}'...")
-    print("   (Note: ลองพูด 'Hey Jarvis' หรือ 'Jarvis' ชัดๆ)")
+    print("   (Note: ลองพูด 'Hey Jarvis' ชัดๆ)")
     
     last_trigger = 0
 
@@ -90,13 +89,13 @@ def main():
             
             if score > THRESHOLD:
                 now = time.time()
-                print(f"⚡ Wake Word Detected! (Score: {score:.3f})")
                 
+                # เช็ค Cooldown ก่อนค่อยพิมพ์/ประมวลผล
                 if now - last_trigger > COOLDOWN_SECONDS:
+                    print(f"⚡ Wake Word Detected! (Score: {score:.3f})")
                     trigger_jarvis()
                     last_trigger = now
-                else:
-                    print(f"   ⏳ Cooldown... ({int(COOLDOWN_SECONDS - (now - last_trigger))}s)")
+                # ถ้าไม่พ้น Cooldown จะเงียบไว้ ไม่พิมพ์รัวๆ แล้วครับ
 
     except KeyboardInterrupt:
         print("\n⏹️  Stopping...")

@@ -14,7 +14,7 @@ from datetime import datetime
 
 # --- ตั้งค่า ---
 DB_PATH = "test/output/face_database.pkl"
-TOLERANCE = 0.6  # ค่า distance ที่ยอมรับ (ยิ่งต่ำยิ่งเข้มงวด)
+TOLERANCE = 0.4  # ค่า distance ที่ยอมรับ (ยิ่งต่ำยิ่งเข้มงวด)
 MODEL = "hog"    # hog สำหรับ CPU, cnn สำหรับ GPU (ถ้ามี)
 PROCESS_EVERY_N_FRAMES = 30  # ประมวลผลทุกๆ 30 เฟรม (ลดการใช้ CPU)
 FRAME_RESIZE_SCALE = 0.25    # ย่อขนาดเฟรมตอนประมวลผล (0.25 = 1/4)
